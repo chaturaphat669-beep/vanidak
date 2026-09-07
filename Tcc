@@ -1,0 +1,1266 @@
+-- =============================================================
+-- 👻 GHOST OSCAR HUB (Full Version + Ultimate Godmode Protection)
+-- =============================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- States
+local WalkSpeedEnabled = false
+local NoclipEnabled, InfiniteJumpEnabled, NoLegAnimEnabled = false, false, false
+local FlyingEnabled, GodmodeEnabled, SpectateEnabled = false, false, false
+local AutoFollowEnabled, IsBehindActive, AntiVoidEnabled, MaxZoomEnabled = false, false, false, false
+local ESPAllEnabled, ESPSpecificEnabled = false, false
+local FullbrightEnabled, ShiftLockEnabled = false, false
+local ExtFlightEnabled = false
+local BangRipEnabled = false
+local ViolentTouchFlingEnabled = false
+local OrbitEnabled = false
+local LookAtEnabled = false
+
+local WalkSpeedValue, FlySpeed, FollowSpeed = 16, 50, 16
+local JumpScareTime, FlingTime, BehindStayTime = 2, 1.5, 3
+local BangRipSpeed = 50
+local OrbitSpeed = 5
+local OrbitDistance = 10
+local OrbitAngle = 0
+
+local JumpScareTarget, LockFollowTarget, FlingTarget, BehindTarget = nil, nil, nil, nil
+local LoopFlingTarget, BangRipTarget, ESPTarget, OrbitTarget, LookAtTarget = nil, nil, nil, nil, nil
+
+local NoclipConn, FollowConn, FlyConn, GodmodeConn, GodmodeHealthConn, AntiVoidConn, MaxZoomConn, FullbrightConn, ShiftLockConn = nil, nil, nil, nil, nil, nil, nil, nil, nil
+local BangRipConn, TouchFlingConn, NoCollideConn, OrbitConn, LookAtConn = nil, nil, nil, nil, nil
+local LastSafeCF = nil
+local OriginalDevMouseLock = LocalPlayer.DevEnableMouseLock
+
+local OldLighting = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness,
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd
+}
+
+-- Helper Functions
+local function GetHRP(plr) return plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") end
+local function GetHum(plr) return plr and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") end
+
+local function GetTargets(selectedTarget)
+    if selectedTarget and selectedTarget.Parent then
+        return {selectedTarget}
+    end
+    
+    local allTargets = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(allTargets, p)
+        end
+    end
+    return allTargets
+end
+
+local function GetMouseLockController()
+    local success, result = pcall(function()
+        local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        if playerScripts then
+            local playerModule = playerScripts:FindFirstChild("PlayerModule")
+            if playerModule then
+                return require(playerModule):GetCameras():GetMouseLockController()
+            end
+        end
+    end)
+    if success and result then return result end
+    return nil
+end
+
+-- Sleek Modern Color Palette
+local Theme = {
+    Background = Color3.fromRGB(13, 14, 20),
+    Sidebar = Color3.fromRGB(19, 21, 30),
+    Header = Color3.fromRGB(22, 24, 35),
+    Card = Color3.fromRGB(25, 28, 41),
+    CardBorder = Color3.fromRGB(42, 46, 68),
+    TextPrimary = Color3.fromRGB(245, 247, 250),
+    TextSecondary = Color3.fromRGB(140, 148, 175),
+    AccentOn = Color3.fromRGB(139, 92, 246),
+    AccentHover = Color3.fromRGB(124, 58, 237),
+    AccentOff = Color3.fromRGB(38, 42, 60),
+    ButtonRed = Color3.fromRGB(239, 68, 68),
+    InputBg = Color3.fromRGB(16, 18, 26)
+}
+
+-- Main UI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "GhostOscarGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Float Toggle Button
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.Size, ToggleBtn.Position = UDim2.new(0, 48, 0, 48), UDim2.new(0, 20, 0, 20)
+ToggleBtn.BackgroundColor3 = Theme.Sidebar
+ToggleBtn.Text, ToggleBtn.TextSize, ToggleBtn.TextColor3 = "👻", 22, Theme.TextPrimary
+ToggleBtn.Active, ToggleBtn.Draggable = true, true
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 14)
+
+local ToggleStroke = Instance.new("UIStroke", ToggleBtn)
+ToggleStroke.Color = Theme.AccentOn
+ToggleStroke.Thickness = 2
+
+-- Main Container Window
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size, MainFrame.Position = UDim2.new(0, 460, 0, 320), UDim2.new(0.5, -230, 0.5, -160)
+MainFrame.BackgroundColor3 = Theme.Background
+MainFrame.BorderSizePixel = 0
+MainFrame.Active, MainFrame.Draggable, MainFrame.Visible = true, true, true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
+
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Theme.CardBorder
+MainStroke.Thickness = 1.5
+
+local function ToggleWindow() MainFrame.Visible = not MainFrame.Visible end
+ToggleBtn.MouseButton1Click:Connect(ToggleWindow)
+UserInputService.InputBegan:Connect(function(i, g) if not g and i.KeyCode == Enum.KeyCode.K then ToggleWindow() end end)
+
+-- Title Header
+local TitleBar = Instance.new("Frame", MainFrame)
+TitleBar.Size, TitleBar.BackgroundColor3 = UDim2.new(1, 0, 0, 40), Theme.Header
+TitleBar.BorderSizePixel = 0
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 14)
+
+local HeaderMask = Instance.new("Frame", TitleBar)
+HeaderMask.Size, HeaderMask.Position = UDim2.new(1, 0, 0, 10), UDim2.new(0, 0, 1, -10)
+HeaderMask.BackgroundColor3 = Theme.Header
+HeaderMask.BorderSizePixel = 0
+
+local Title = Instance.new("TextLabel", TitleBar)
+Title.Size, Title.Position, Title.BackgroundTransparency = UDim2.new(1, -50, 1, 0), UDim2.new(0, 14, 0, 0), 1
+Title.Text = "👻 GHOST OSCAR HUB"
+Title.TextColor3, Title.TextSize, Title.Font = Theme.TextPrimary, 13, Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", TitleBar)
+CloseBtn.Size, CloseBtn.Position = UDim2.new(0, 26, 0, 26), UDim2.new(1, -33, 0.5, -13)
+CloseBtn.BackgroundColor3 = Theme.ButtonRed
+CloseBtn.Text, CloseBtn.TextColor3, CloseBtn.Font, CloseBtn.TextSize = "✕", Theme.TextPrimary, Enum.Font.GothamBold, 11
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
+CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+
+-- Sidebar Navigation
+local Sidebar = Instance.new("Frame", MainFrame)
+Sidebar.Size, Sidebar.Position = UDim2.new(0, 125, 1, -40), UDim2.new(0, 0, 0, 40)
+Sidebar.BackgroundColor3 = Theme.Sidebar
+Sidebar.BorderSizePixel = 0
+
+local SideLayout = Instance.new("UIListLayout", Sidebar)
+SideLayout.SortOrder, SideLayout.Padding = Enum.SortOrder.LayoutOrder, UDim.new(0, 4)
+SideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local SidePadding = Instance.new("UIPadding", Sidebar)
+SidePadding.PaddingTop = UDim.new(0, 8)
+
+-- Tab Content Container
+local ContentArea = Instance.new("Frame", MainFrame)
+ContentArea.Size, ContentArea.Position = UDim2.new(1, -130, 1, -45), UDim2.new(0, 128, 0, 42)
+ContentArea.BackgroundTransparency = 1
+
+local Tabs = {}
+local TabButtons = {}
+
+local function CreateTab(name, icon, order)
+    local tabBtn = Instance.new("TextButton", Sidebar)
+    tabBtn.Size = UDim2.new(0.9, 0, 0, 32)
+    tabBtn.BackgroundColor3 = Theme.Sidebar
+    tabBtn.Text = icon .. " " .. name
+    tabBtn.TextColor3 = Theme.TextSecondary
+    tabBtn.Font = Enum.Font.GothamMedium
+    tabBtn.TextSize = 10
+    tabBtn.LayoutOrder = order
+    Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 8)
+
+    local scroll = Instance.new("ScrollingFrame", ContentArea)
+    scroll.Size = UDim2.new(1, -6, 1, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.ScrollBarThickness = 3
+    scroll.ScrollBarImageColor3 = Theme.AccentOn
+    scroll.Visible = false
+
+    local list = Instance.new("UIListLayout", scroll)
+    list.SortOrder, list.Padding = Enum.SortOrder.LayoutOrder, UDim.new(0, 6)
+    
+    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 10)
+    end)
+
+    tabBtn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        for _, b in pairs(TabButtons) do 
+            b.BackgroundColor3 = Theme.Sidebar 
+            b.TextColor3 = Theme.TextSecondary
+        end
+        scroll.Visible = true
+        tabBtn.BackgroundColor3 = Theme.AccentOn
+        tabBtn.TextColor3 = Theme.TextPrimary
+    end)
+
+    Tabs[name] = scroll
+    TabButtons[name] = tabBtn
+    return scroll
+end
+
+local TabMove = CreateTab("เคลื่อนที่", "⚡", 1)
+local TabCam = CreateTab("การมองเห็น", "👁️", 2)
+local TabTroll = CreateTab("เป้าหมาย", "🎯", 3)
+local TabSafe = CreateTab("ระบบ/ป้องกัน", "🛡️", 4)
+
+-- Activate First Tab Default
+Tabs["เคลื่อนที่"].Visible = true
+TabButtons["เคลื่อนที่"].BackgroundColor3 = Theme.AccentOn
+TabButtons["เคลื่อนที่"].TextColor3 = Theme.TextPrimary
+
+-- Helper Builders
+local function CreateCard(parent, h)
+    local card = Instance.new("Frame", parent)
+    card.Size, card.BackgroundColor3 = UDim2.new(1, -6, 0, h or 34), Theme.Card
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Color = Theme.CardBorder
+    stroke.Thickness = 1
+    return card
+end
+
+local function CreateCircleBtn(parent, text, bg, size, pos)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = size or UDim2.new(0, 28, 0, 24)
+    btn.Position = pos or UDim2.new(1, -32, 0.5, -12)
+    btn.BackgroundColor3 = bg or Theme.AccentOff
+    btn.Text = text
+    btn.TextColor3 = Theme.TextPrimary
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 10
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+local function CreateToggleButton(parent, title, callback)
+    local card = CreateCard(parent, 34)
+    local label = Instance.new("TextLabel", card)
+    label.Size, label.Position, label.BackgroundTransparency = UDim2.new(1, -50, 1, 0), UDim2.new(0, 10, 0, 0), 1
+    label.Text = title
+    label.TextColor3, label.Font, label.TextSize = Theme.TextPrimary, Enum.Font.GothamMedium, 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local btn = CreateCircleBtn(card, "OFF", Theme.AccentOff, UDim2.new(0, 38, 0, 22), UDim2.new(1, -44, 0.5, -11))
+    local state = false
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = state and "ON" or "OFF"
+        btn.BackgroundColor3 = state and Theme.AccentOn or Theme.AccentOff
+        callback(state)
+    end)
+    return card
+end
+
+local function CreateActionButton(parent, title, btnText, bg, callback)
+    local card = CreateCard(parent, 34)
+    local label = Instance.new("TextLabel", card)
+    label.Size, label.Position, label.BackgroundTransparency = UDim2.new(1, -85, 1, 0), UDim2.new(0, 10, 0, 0), 1
+    label.Text = title
+    label.TextColor3, label.Font, label.TextSize = Theme.TextPrimary, Enum.Font.GothamMedium, 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local btn = Instance.new("TextButton", card)
+    btn.Size, btn.Position = UDim2.new(0, 70, 0, 22), UDim2.new(1, -76, 0.5, -11)
+    btn.BackgroundColor3 = bg or Theme.ButtonRed
+    btn.Text = btnText or "กด"
+    btn.TextColor3 = Theme.TextPrimary
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 10
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(callback)
+    return card
+end
+
+local function CreateInputWithCircleBtn(parent, placeholder, icon, callback)
+    local card = CreateCard(parent, 34)
+    local box = Instance.new("TextBox", card)
+    box.Size, box.Position = UDim2.new(1, -45, 0, 22), UDim2.new(0, 8, 0.5, -11)
+    box.BackgroundColor3 = Theme.InputBg
+    box.PlaceholderText, box.Text = placeholder, ""
+    box.PlaceholderColor3 = Theme.TextSecondary
+    box.TextColor3, box.Font, box.TextSize = Theme.TextPrimary, Enum.Font.Gotham, 10
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+    
+    local boxStroke = Instance.new("UIStroke", box)
+    boxStroke.Color = Theme.CardBorder
+    boxStroke.Thickness = 1
+    
+    local btn = CreateCircleBtn(card, icon, Theme.AccentOn, UDim2.new(0, 28, 0, 22), UDim2.new(1, -34, 0.5, -11))
+    local fire = function() callback(box.Text) end
+    btn.MouseButton1Click:Connect(fire)
+    box.FocusLost:Connect(function(e) if e then fire() end end)
+    return card
+end
+
+local function CreateDropdown(parent, title, icon, actionText, bg, onSelect, onAction)
+    local card = CreateCard(parent, 34)
+    card.ClipsDescendants = true
+    
+    local mainBtn = Instance.new("TextButton", card)
+    mainBtn.Size, mainBtn.Position, mainBtn.BackgroundTransparency = UDim2.new(1, -45, 0, 34), UDim2.new(0, 10, 0, 0), 1
+    mainBtn.Text = title
+    mainBtn.TextColor3, mainBtn.Font, mainBtn.TextSize = Theme.TextPrimary, Enum.Font.GothamMedium, 10
+    mainBtn.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local actBtn = icon and CreateCircleBtn(card, icon, bg or Theme.AccentOn, UDim2.new(0, 28, 0, 22), UDim2.new(1, -34, 0, 6))
+    
+    local listFrame = Instance.new("Frame", card)
+    listFrame.Size, listFrame.Position, listFrame.BackgroundTransparency = UDim2.new(1, 0, 1, -34), UDim2.new(0, 0, 0, 34), 1
+    Instance.new("UIListLayout", listFrame).SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local isOpen = false
+    local function Refresh()
+        for _, c in pairs(listFrame:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+        
+        local resetItem = Instance.new("Frame", listFrame)
+        resetItem.Size, resetItem.BackgroundTransparency = UDim2.new(1, 0, 0, 28), 1
+        local resetLbl = Instance.new("TextLabel", resetItem)
+        resetLbl.Size, resetLbl.Position, resetLbl.BackgroundTransparency = UDim2.new(1, -45, 1, 0), UDim2.new(0, 10, 0, 0), 1
+        resetLbl.Text = "[ทุกคนในเซิร์ฟเวอร์]"
+        resetLbl.TextColor3, resetLbl.Font, resetLbl.TextSize = Theme.AccentOn, Enum.Font.GothamBold, 10
+        resetLbl.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local resetSel = CreateCircleBtn(resetItem, "ล้าง", Theme.AccentOff, UDim2.new(0, 32, 0, 20), UDim2.new(1, -38, 0.5, -10))
+        resetSel.TextSize = 8
+        resetSel.MouseButton1Click:Connect(function()
+            onSelect(nil, mainBtn)
+            isOpen = false
+            card.Size = UDim2.new(1, -6, 0, 34)
+        end)
+
+        local count = 1
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                count = count + 1
+                local item = Instance.new("Frame", listFrame)
+                item.Size, item.BackgroundTransparency = UDim2.new(1, 0, 0, 28), 1
+                
+                local lbl = Instance.new("TextLabel", item)
+                lbl.Size, lbl.Position, lbl.BackgroundTransparency = UDim2.new(1, -45, 1, 0), UDim2.new(0, 10, 0, 0), 1
+                lbl.Text = p.DisplayName
+                lbl.TextColor3, lbl.Font, lbl.TextSize = Theme.TextSecondary, Enum.Font.Gotham, 10
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local sel = CreateCircleBtn(item, actionText or "เลือก", bg or Theme.AccentOn, UDim2.new(0, 32, 0, 20), UDim2.new(1, -38, 0.5, -10))
+                sel.TextSize = 8
+                sel.MouseButton1Click:Connect(function()
+                    onSelect(p, mainBtn)
+                    isOpen = false
+                    card.Size = UDim2.new(1, -6, 0, 34)
+                end)
+            end
+        end
+        if isOpen then card.Size = UDim2.new(1, -6, 0, 34 + (count * 28)) end
+    end
+    
+    mainBtn.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        if isOpen then Refresh() else card.Size = UDim2.new(1, -6, 0, 34) end
+    end)
+    
+    if actBtn and onAction then actBtn.MouseButton1Click:Connect(onAction) end
+    return Refresh, function() return isOpen end
+end
+
+-- ==================== TAB 1: ⚡ MOVEMENT (การเคลื่อนที่) ====================
+CreateToggleButton(TabMove, "👻 1. เดินทะลุ (Noclip)", function(e)
+    NoclipEnabled = e
+    if NoclipEnabled then
+        NoclipConn = RunService.Stepped:Connect(function()
+            if LocalPlayer.Character then
+                for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+            end
+        end)
+    elseif NoclipConn then
+        NoclipConn:Disconnect()
+        NoclipConn = nil
+    end
+end)
+
+CreateInputWithCircleBtn(TabMove, "🏃 2. ตั้งค่าความเร็วเดิน (1-1000)", "⚡", function(t)
+    local n = tonumber(t)
+    if n then WalkSpeedValue = math.clamp(n, 1, 1000) end
+end)
+
+CreateToggleButton(TabMove, "⚡ 2.1 เปิด/ปิด ความเร็วเดิน (WalkSpeed)", function(e)
+    WalkSpeedEnabled = e
+    if not WalkSpeedEnabled then
+        local hum = GetHum(LocalPlayer)
+        if hum then hum.WalkSpeed = 16 end
+    end
+end)
+
+CreateInputWithCircleBtn(TabMove, "💨 4. ความเร็วบิน (1-1000)", "🚀", function(t)
+    local n = tonumber(t)
+    if n then FlySpeed = math.clamp(n, 1, 1000) end
+end)
+
+local ExternalFlyGuis = {}
+CreateToggleButton(TabMove, "🌐 4.1 Flight of Invincible (สคริปต์ภายนอก)", function(e)
+    ExtFlightEnabled = e
+    if ExtFlightEnabled then
+        local beforePlayerGuis = {}
+        local beforeCoreGuis = {}
+        
+        for _, v in pairs(LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do beforePlayerGuis[v] = true end
+        if gethui then for _, v in pairs(gethui():GetChildren()) do beforeCoreGuis[v] = true end end
+
+        pcall(function()
+            loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-flight-of-the-Invincible-59729"))()
+        end)
+
+        task.delay(0.5, function()
+            for _, v in pairs(LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
+                if not beforePlayerGuis[v] and v.Name ~= "GhostOscarGUI" then table.insert(ExternalFlyGuis, v) end
+            end
+            if gethui then
+                for _, v in pairs(gethui():GetChildren()) do
+                    if not beforeCoreGuis[v] and v.Name ~= "GhostOscarGUI" then table.insert(ExternalFlyGuis, v) end
+                end
+            end
+        end)
+    else
+        local hrp, hum = GetHRP(LocalPlayer), GetHum(LocalPlayer)
+        if hrp then
+            for _, v in pairs(hrp:GetChildren()) do
+                if v:IsA("BodyVelocity") or v:IsA("BodyGyro") or v:IsA("BodyPosition") then v:Destroy() end
+            end
+        end
+        if hum then hum.PlatformStand = false hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+        for _, gui in pairs(ExternalFlyGuis) do if gui and gui.Parent then gui:Destroy() end end
+        ExternalFlyGuis = {}
+    end
+end)
+
+-- 🦅 4.2 บินอิสระ
+CreateToggleButton(TabMove, "🦅 4.2 บินอิสระ (หันตามกล้อง + เคลื่อนที่อิสระ)", function(e)
+    FlyingEnabled = e
+    local hrp, hum = GetHRP(LocalPlayer), GetHum(LocalPlayer)
+    
+    if FlyingEnabled and hrp then
+        if hum then hum.PlatformStand = true end
+
+        local bv = hrp:FindFirstChild("GhostFlyBV") or Instance.new("BodyVelocity")
+        bv.Name = "GhostFlyBV"
+        bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        bv.Velocity = Vector3.new(0, 0, 0)
+        bv.Parent = hrp
+
+        local bg = hrp:FindFirstChild("GhostFlyBG") or Instance.new("BodyGyro")
+        bg.Name = "GhostFlyBG"
+        bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        bg.P = 9e4
+        bg.Parent = hrp
+
+        if FlyConn then FlyConn:Disconnect() end
+        FlyConn = RunService.RenderStepped:Connect(function()
+            local currentHRP, currentHum = GetHRP(LocalPlayer), GetHum(LocalPlayer)
+            if not FlyingEnabled or not currentHRP or not currentHRP:FindFirstChild("GhostFlyBV") then
+                if bv then bv:Destroy() end
+                if bg then bg:Destroy() end
+                if currentHum then 
+                    currentHum.PlatformStand = false 
+                    currentHum:ChangeState(Enum.HumanoidStateType.GettingUp) 
+                end
+                if FlyConn then FlyConn:Disconnect() FlyConn = nil end
+                return
+            end
+
+            currentHum.PlatformStand = true
+            bg.CFrame = Camera.CFrame
+
+            local camCF = Camera.CFrame
+            local moveVector = Vector3.new(0, 0, 0)
+
+            local forward = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
+            local right = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+            local up = ((UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E)) and 1 or 0) - ((UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q)) and 1 or 0)
+
+            if forward ~= 0 or right ~= 0 or up ~= 0 then
+                moveVector = (camCF.LookVector * forward) + (camCF.RightVector * right) + (camCF.UpVector * up)
+            end
+
+            if moveVector.Magnitude > 0 then
+                bv.Velocity = moveVector.Unit * FlySpeed
+            else
+                bv.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+    else
+        if hum then 
+            hum.PlatformStand = false 
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp) 
+        end
+        if hrp then
+            if hrp:FindFirstChild("GhostFlyBV") then hrp.GhostFlyBV:Destroy() end
+            if hrp:FindFirstChild("GhostFlyBG") then hrp.GhostFlyBG:Destroy() end
+        end
+        if FlyConn then FlyConn:Disconnect() FlyConn = nil end
+    end
+end)
+
+CreateToggleButton(TabMove, "🦵 5. เดินไม่ก้าวเท้า (No Leg)", function(e)
+    NoLegAnimEnabled = e
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Animate") then
+        LocalPlayer.Character.Animate.Disabled = NoLegAnimEnabled
+    end
+end)
+
+CreateToggleButton(TabMove, "🦘 6. กระโดดได้เรื่อยๆ (Inf Jump)", function(e) InfiniteJumpEnabled = e end)
+UserInputService.JumpRequest:Connect(function()
+    if InfiniteJumpEnabled then
+        local hum = GetHum(LocalPlayer)
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+
+-- ==================== TAB 2: 👁️ VISUALS & CAM (การมองเห็นและมองทะลุ) ====================
+local ESPFolder = Instance.new("Folder", workspace)
+ESPFolder.Name = "GhostOscarESP"
+
+local refESP, openESP = CreateDropdown(TabCam, "👁️ เลือกเป้าหมายมองทะลุ 🔻", nil, "เลือก", Theme.AccentOn, function(p, btn)
+    ESPTarget = p
+    btn.Text = p and ("👁️ 8.1 เป้าหมาย: " .. p.DisplayName) or "👁️ เลือกเป้าหมายมองทะลุ 🔻"
+end)
+
+CreateToggleButton(TabCam, "👁️ 8.1 เปิดมองทะลุเฉพาะคนที่เลือก", function(e) ESPSpecificEnabled = e end)
+CreateToggleButton(TabCam, "👁️ 8.2 เปิดมองทะลุทุกคนในห้อง (ESP All)", function(e) ESPAllEnabled = e end)
+
+RunService.RenderStepped:Connect(function()
+    local myHRP = GetHRP(LocalPlayer)
+    local activeESPMap = {}
+
+    if ESPAllEnabled then
+        for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then activeESPMap[p] = true end end
+    elseif ESPSpecificEnabled then
+        local targets = GetTargets(ESPTarget)
+        for _, p in pairs(targets) do if p ~= LocalPlayer then activeESPMap[p] = true end end
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and not activeESPMap[p] then
+            if p.Character and p.Character:FindFirstChild("GhostRedHighlight") then
+                p.Character.GhostRedHighlight:Destroy()
+            end
+            local bb = ESPFolder:FindFirstChild(p.Name .. "_ESP")
+            if bb then bb:Destroy() end
+        end
+    end
+
+    for p, _ in pairs(activeESPMap) do
+        if p.Character then
+            local char = p.Character
+            local head = char:FindFirstChild("Head")
+            local targetHum = GetHum(p)
+            local targetHRP = GetHRP(p)
+
+            local hl = char:FindFirstChild("GhostRedHighlight")
+            if not hl then
+                hl = Instance.new("Highlight")
+                hl.Name = "GhostRedHighlight"
+                hl.FillColor = Color3.fromRGB(255, 0, 0)
+                hl.FillTransparency = 0.4
+                hl.OutlineColor = Color3.fromRGB(255, 60, 60)
+                hl.OutlineTransparency = 0
+                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                hl.Adornee = char
+                hl.Parent = char
+            end
+
+            local bbName = p.Name .. "_ESP"
+            local bb = ESPFolder:FindFirstChild(bbName)
+
+            if head and targetHum and targetHRP then
+                if not bb then
+                    bb = Instance.new("BillboardGui", ESPFolder)
+                    bb.Name = bbName
+                    bb.Size = UDim2.new(0, 180, 0, 65)
+                    bb.StudsOffset = Vector3.new(0, 3, 0)
+                    bb.AlwaysOnTop = true
+
+                    local lbl = Instance.new("TextLabel", bb)
+                    lbl.Name = "NameLabel"
+                    lbl.Size = UDim2.new(1, 0, 0, 22)
+                    lbl.BackgroundTransparency = 1
+                    lbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+                    lbl.TextStrokeTransparency = 0
+                    lbl.Font = Enum.Font.SourceSansBold
+                    lbl.TextSize = 12
+
+                    local hpText = Instance.new("TextLabel", bb)
+                    hpText.Name = "HPText"
+                    hpText.Size = UDim2.new(1, 0, 0, 15)
+                    hpText.Position = UDim2.new(0, 0, 0, 22)
+                    hpText.BackgroundTransparency = 1
+                    hpText.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    hpText.TextStrokeTransparency = 0
+                    hpText.Font = Enum.Font.SourceSans
+                    hpText.TextSize = 10
+
+                    local barBg = Instance.new("Frame", bb)
+                    barBg.Name = "HPBarBg"
+                    barBg.Size = UDim2.new(0.8, 0, 0, 6)
+                    barBg.Position = UDim2.new(0.1, 0, 0, 38)
+                    barBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                    barBg.BorderSizePixel = 0
+                    Instance.new("UICorner", barBg).CornerRadius = UDim.new(0, 3)
+
+                    local barFill = Instance.new("Frame", barBg)
+                    barFill.Name = "HPBarFill"
+                    barFill.Size = UDim2.new(1, 0, 1, 0)
+                    barFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+                    barFill.BorderSizePixel = 0
+                    Instance.new("UICorner", barFill).CornerRadius = UDim.new(0, 3)
+                end
+
+                bb.Adornee = head
+                local dist = myHRP and math.floor((myHRP.Position - targetHRP.Position).Magnitude) or 0
+                local lbl = bb:FindFirstChild("NameLabel")
+                if lbl then lbl.Text = string.format("%s (@%s)\n[%d m]", p.DisplayName, p.Name, dist) end
+
+                local hpText = bb:FindFirstChild("HPText")
+                local barBg = bb:FindFirstChild("HPBarBg")
+                local barFill = barBg and barBg:FindFirstChild("HPBarFill")
+                
+                if targetHum then
+                    local curHP = math.clamp(targetHum.Health, 0, targetHum.MaxHealth)
+                    local maxHP = targetHum.MaxHealth > 0 and targetHum.MaxHealth or 100
+                    local ratio = curHP / maxHP
+
+                    if hpText then hpText.Text = string.format("HP: %d / %d", math.floor(curHP), math.floor(maxHP)) end
+                    if barFill then
+                        barFill.Size = UDim2.new(ratio, 0, 1, 0)
+                        barFill.BackgroundColor3 = Color3.fromHSV(ratio * 0.3, 0.9, 0.9)
+                    end
+                end
+            elseif bb then
+                bb:Destroy()
+            end
+        end
+    end
+end)
+
+local fixCamCard = CreateCard(TabCam, 34)
+local fixCamLabel = Instance.new("TextLabel", fixCamCard)
+fixCamLabel.Size, fixCamLabel.Position, fixCamLabel.BackgroundTransparency = UDim2.new(1, -45, 1, 0), UDim2.new(0, 10, 0, 0), 1
+fixCamLabel.Text = "🎥 14. แก้ไขมุมกล้อง (Fix Cam)"
+fixCamLabel.TextColor3, fixCamLabel.Font, fixCamLabel.TextSize = Theme.TextPrimary, Enum.Font.GothamMedium, 10
+fixCamLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local fixCamBtn = CreateCircleBtn(fixCamCard, "🎥", Theme.AccentOn, UDim2.new(0, 28, 0, 22), UDim2.new(1, -34, 0.5, -11))
+fixCamBtn.MouseButton1Click:Connect(function()
+    local hum = GetHum(LocalPlayer)
+    if Camera and hum then
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = hum
+        Camera.FieldOfView = 70
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+            Camera.CFrame = LocalPlayer.Character.Head.CFrame
+        end
+    end
+end)
+
+CreateToggleButton(TabCam, "🔍 15. ปลดล็อกระยะซูมกล้อง (Unlimited Zoom)", function(e)
+    MaxZoomEnabled = e
+    if MaxZoomEnabled then
+        MaxZoomConn = RunService.RenderStepped:Connect(function()
+            LocalPlayer.CameraMaxZoomDistance = 100000
+            LocalPlayer.CameraMinZoomDistance = 0.5
+        end)
+    else
+        if MaxZoomConn then MaxZoomConn:Disconnect() MaxZoomConn = nil end
+        LocalPlayer.CameraMaxZoomDistance = 128
+        LocalPlayer.CameraMinZoomDistance = 0.5
+    end
+end)
+
+CreateToggleButton(TabCam, "💡 16. มองที่มืดได้ (Fullbright)", function(e)
+    FullbrightEnabled = e
+    if FullbrightEnabled then
+        OldLighting.Ambient = Lighting.Ambient
+        OldLighting.OutdoorAmbient = Lighting.OutdoorAmbient
+        OldLighting.Brightness = Lighting.Brightness
+        OldLighting.GlobalShadows = Lighting.GlobalShadows
+        OldLighting.FogEnd = Lighting.FogEnd
+
+        FullbrightConn = RunService.RenderStepped:Connect(function()
+            if FullbrightEnabled then
+                Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+                Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+                Lighting.Brightness = 2
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+            end
+        end)
+    else
+        if FullbrightConn then FullbrightConn:Disconnect() FullbrightConn = nil end
+        Lighting.Ambient = OldLighting.Ambient
+        Lighting.OutdoorAmbient = OldLighting.OutdoorAmbient
+        Lighting.Brightness = OldLighting.Brightness
+        Lighting.GlobalShadows = OldLighting.GlobalShadows
+        Lighting.FogEnd = OldLighting.FogEnd
+    end
+end)
+
+CreateToggleButton(TabCam, "🔒 17. บังคับใช้งาน Shift Lock", function(e)
+    ShiftLockEnabled = e
+    local controller = GetMouseLockController()
+    
+    if ShiftLockEnabled then
+        OriginalDevMouseLock = LocalPlayer.DevEnableMouseLock
+        LocalPlayer.DevEnableMouseLock = true
+        if controller then
+            if not controller:GetIsMouseLocked() then controller:OnMouseLockToggled() end
+        else
+            UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        end
+
+        if ShiftLockConn then ShiftLockConn:Disconnect() end
+        ShiftLockConn = RunService.RenderStepped:Connect(function()
+            if ShiftLockEnabled and LocalPlayer then
+                LocalPlayer.DevEnableMouseLock = true
+                local currentCtrl = GetMouseLockController()
+                if currentCtrl and not currentCtrl:GetIsMouseLocked() then
+                    currentCtrl:OnMouseLockToggled()
+                end
+            end
+        end)
+    else
+        if ShiftLockConn then ShiftLockConn:Disconnect() ShiftLockConn = nil end
+        if controller then
+            if controller:GetIsMouseLocked() then controller:OnMouseLockToggled() end
+        else
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        end
+        if LocalPlayer then LocalPlayer.DevEnableMouseLock = OriginalDevMouseLock end
+    end
+end)
+
+
+-- ==================== TAB 3: 🎯 TARGET & TROLL (เป้าหมายและก่อกวน) ====================
+CreateToggleButton(TabTroll, "🌪️ เดินชนทะลุ + หมุนควงสว่านปลิวออกนอกแมพ", function(e)
+    ViolentTouchFlingEnabled = e
+    if ViolentTouchFlingEnabled then
+        if NoCollideConn then NoCollideConn:Disconnect() end
+        NoCollideConn = RunService.Stepped:Connect(function()
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    for _, part in pairs(p.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
+            end
+        end)
+
+        if TouchFlingConn then TouchFlingConn:Disconnect() end
+        TouchFlingConn = RunService.Heartbeat:Connect(function()
+            local myHRP = GetHRP(LocalPlayer)
+            local myChar = LocalPlayer.Character
+            if not myHRP or not myChar then return end
+
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    local tHRP = GetHRP(p)
+                    if tHRP then
+                        local dist = (tHRP.Position - myHRP.Position).Magnitude
+                        if dist <= 4.5 then
+                            local dir = (tHRP.Position - myHRP.Position).Unit
+                            if dir.Magnitude == 0 or dir ~= dir then dir = Vector3.new(0, 1, 0) end
+                            
+                            myHRP.Velocity = (dir * 1200) + Vector3.new(0, 800, 0)
+                            myHRP.RotVelocity = Vector3.new(math.random(-1000,1000), math.random(1500,3000), math.random(-1000,1000))
+                            myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, math.sin(tick() * 50) * 0.2)
+
+                            tHRP.Velocity = (dir * 1500) + Vector3.new(0, 900, 0)
+                            tHRP.RotVelocity = Vector3.new(math.random(-1200, 1200), math.random(2000, 4000), math.random(-1200, 1200))
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if NoCollideConn then NoCollideConn:Disconnect() NoCollideConn = nil end
+        if TouchFlingConn then TouchFlingConn:Disconnect() TouchFlingConn = nil end
+        local myHRP = GetHRP(LocalPlayer)
+        if myHRP then
+            myHRP.Velocity = Vector3.zero
+            myHRP.RotVelocity = Vector3.zero
+        end
+    end
+end)
+
+CreateInputWithCircleBtn(TabTroll, "⏱️ 3. เวลาโผล่หน้า (วิ)", "⏱️", function(t)
+    local n = tonumber(t)
+    if n then JumpScareTime = math.clamp(n, 0.5, 100) end
+end)
+
+local refJS, openJS = CreateDropdown(TabTroll, "😱 3. เลือกเป้าหมายโผล่หน้า 🔻", "👻", "เลือก", Theme.ButtonRed, function(p, btn)
+    JumpScareTarget = p
+    btn.Text = p and ("😱 3. เป้าหมาย: " .. p.DisplayName) or "😱 3. เลือกเป้าหมายโผล่หน้า 🔻"
+end, function()
+    local targets = GetTargets(JumpScareTarget)
+    local myHRP = GetHRP(LocalPlayer)
+    if myHRP and #targets > 0 then
+        local target = targets[math.random(1, #targets)]
+        local targetHRP = GetHRP(target)
+        if targetHRP then
+            local old = myHRP.CFrame
+            myHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, -2.5) * CFrame.Angles(0, math.pi, 0)
+            task.delay(JumpScareTime, function()
+                if myHRP and myHRP.Parent then myHRP.CFrame = old end
+            end)
+        end
+    end
+end)
+
+CreateInputWithCircleBtn(TabTroll, "🏎️ 7. ความเร็วเดินตาม (1-1000)", "⚡", function(t)
+    local n = tonumber(t)
+    if n then FollowSpeed = math.clamp(n, 1, 1000) end
+end)
+
+local refLF, openLF = CreateDropdown(TabTroll, "🎯 7. เลือกเป้าหมาย (มอง/ตาม) 🔻", nil, "เลือก", Theme.AccentOn, function(p, btn)
+    LockFollowTarget = p
+    btn.Text = p and ("🎯 7. เป้าหมาย: " .. p.DisplayName) or "🎯 7. เลือกเป้าหมาย (มอง/ตาม) 🔻"
+end)
+
+CreateToggleButton(TabTroll, "👀 7.1 มองล็อคเป้าหมาย (Lock Cam)", function(e)
+    SpectateEnabled = e
+    if SpectateEnabled then
+        local targets = GetTargets(LockFollowTarget)
+        if #targets > 0 then
+            local targetHum = GetHum(targets[1])
+            if targetHum then Camera.CameraSubject = targetHum end
+        end
+    else
+        local myHum = GetHum(LocalPlayer)
+        if myHum then Camera.CameraSubject = myHum end
+    end
+end)
+
+CreateToggleButton(TabTroll, "👣 7.2 เดินตามเป้าหมายตลอดเวลา", function(e)
+    AutoFollowEnabled = e
+    if AutoFollowEnabled then
+        FollowConn = RunService.Heartbeat:Connect(function()
+            local targets = GetTargets(LockFollowTarget)
+            if #targets > 0 then
+                local targetHRP = GetHRP(targets[1])
+                local myHum = GetHum(LocalPlayer)
+                if targetHRP and myHum then
+                    myHum.WalkSpeed = FollowSpeed
+                    myHum:MoveTo(targetHRP.Position)
+                end
+            end
+        end)
+    elseif FollowConn then
+        FollowConn:Disconnect()
+        FollowConn = nil
+    end
+end)
+
+local refLookAt, openLookAt = CreateDropdown(TabTroll, "👀 เลือกเป้าหมายหันมอง 🔻", nil, "เลือก", Theme.AccentOn, function(p, btn)
+    LookAtTarget = p
+    btn.Text = p and ("👀 เป้าหมายหันมอง: " .. p.DisplayName) or "👀 เลือกเป้าหมายหันมอง 🔻"
+end)
+
+CreateToggleButton(TabTroll, "👀 7.3 ตัวละครหันมองเป้าหมายตลอดเวลา", function(e)
+    LookAtEnabled = e
+    if LookAtEnabled then
+        if LookAtConn then LookAtConn:Disconnect() end
+        LookAtConn = RunService.RenderStepped:Connect(function()
+            if not LookAtEnabled then
+                if LookAtConn then LookAtConn:Disconnect() LookAtConn = nil end
+                return
+            end
+
+            local targets = GetTargets(LookAtTarget)
+            local myHRP = GetHRP(LocalPlayer)
+
+            if #targets > 0 and myHRP then
+                local tHRP = GetHRP(targets[1])
+                if tHRP then
+                    local targetPos = Vector3.new(tHRP.Position.X, myHRP.Position.Y, tHRP.Position.Z)
+                    myHRP.CFrame = CFrame.new(myHRP.Position, targetPos)
+                end
+            end
+        end)
+    else
+        if LookAtConn then LookAtConn:Disconnect() LookAtConn = nil end
+    end
+end)
+
+CreateInputWithCircleBtn(TabTroll, "⏳ 9. เวลากระแทก (วิ)", "⏱️", function(t)
+    local n = tonumber(t)
+    if n then FlingTime = math.clamp(n, 0.1, 10000) end
+end)
+
+local refFling, openFling = CreateDropdown(TabTroll, "💥 9. เลือกเป้าหมายกระแทก 🔻", "💥", "เลือก", Theme.ButtonRed, function(p, btn)
+    FlingTarget = p
+    btn.Text = p and ("💥 9. เป้าหมาย: " .. p.DisplayName) or "💥 9. เลือกเป้าหมายกระแทก 🔻"
+end, function()
+    local targets = GetTargets(FlingTarget)
+    local myChar = LocalPlayer.Character
+    local myHRP = GetHRP(LocalPlayer)
+
+    if myChar and myHRP and #targets > 0 then
+        local orig = myHRP.CFrame
+        local bav = Instance.new("BodyAngularVelocity")
+        bav.Name = "GhostFlingBAV"
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(0, 999999, 0)
+        bav.Parent = myHRP
+
+        local st = tick()
+        local targetIdx = 1
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            local curHRP = GetHRP(LocalPlayer)
+            local currentTarget = targets[targetIdx]
+            local tHRP = GetHRP(currentTarget)
+            
+            if tick() - st > FlingTime or not curHRP or not curHRP.Parent then
+                if bav then bav:Destroy() end
+                conn:Disconnect()
+                if curHRP and curHRP.Parent then
+                    curHRP.Velocity = Vector3.zero
+                    curHRP.RotVelocity = Vector3.zero
+                    curHRP.CFrame = orig
+                end
+                for _, p in pairs(myChar:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end
+            else
+                for _, p in pairs(myChar:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
+                if tHRP then
+                    local tVel = tHRP.Velocity
+                    curHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, math.sin(tick() * 30) * 0.1) + (tVel * 0.05)
+                    curHRP.RotVelocity = Vector3.new(20000, 20000, 20000)
+                    curHRP.Velocity = Vector3.new(10000, 10000, 10000)
+                end
+                targetIdx = (targetIdx % #targets) + 1
+            end
+        end)
+    end
+end)
+
+CreateDropdown(TabTroll, "🌀 10. เลือกวาร์ปไปหาผู้เล่น 🔻", nil, "🌀", Theme.AccentOn, function(p)
+    local myHRP = GetHRP(LocalPlayer)
+    local targetHRP = GetHRP(p)
+    if myHRP and targetHRP then myHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3) end
+end)
+
+CreateInputWithCircleBtn(TabTroll, "⏱️ 12. เวลาแอบหลัง (วิ)", "⏱️", function(t)
+    local n = tonumber(t)
+    if n then BehindStayTime = math.clamp(n, 0.1, 1e8) end
+end)
+
+local refBehind, openBehind = CreateDropdown(TabTroll, "👤 12. เลือกเป้าหมายโผล่หลัง 🔻", "👤", "เลือก", Theme.AccentOn, function(p, btn)
+    BehindTarget = p
+    btn.Text = p and ("👤 12. เป้าหมาย: " .. p.DisplayName) or "👤 12. เลือกเป้าหมายโผล่หลัง 🔻"
+end, function()
+    local targets = GetTargets(BehindTarget)
+    local myHRP = GetHRP(LocalPlayer)
+    if IsBehindActive or not myHRP or #targets == 0 then return end
+
+    IsBehindActive = true
+    local orig, st = myHRP.CFrame, tick()
+    local targetIdx = 1
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        local currentTarget = targets[targetIdx]
+        local tHRP = GetHRP(currentTarget)
+        local curHRP = GetHRP(LocalPlayer)
+        
+        if tick() - st > BehindStayTime or not curHRP then
+            conn:Disconnect()
+            if curHRP then curHRP.CFrame = orig end
+            IsBehindActive = false
+            return
+        end
+        
+        if tHRP then curHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, 2.5) end
+        targetIdx = (targetIdx % #targets) + 1
+    end)
+end)
+
+CreateInputWithCircleBtn(TabTroll, "⚙️ 20. ความไว Bang Rip (1-1000)", "⚡", function(t)
+    local n = tonumber(t)
+    if n then BangRipSpeed = math.clamp(n, 1, 1000) end
+end)
+
+local refBangRip, openBangRip = CreateDropdown(TabTroll, "🔞 20. เลือกเป้าหมาย Bang Rip 🔻", nil, "เลือก", Theme.AccentOn, function(p, btn)
+    BangRipTarget = p
+    btn.Text = p and ("🔞 20. เป้าหมาย Bang: " .. p.DisplayName) or "🔞 20. เลือกเป้าหมาย Bang Rip 🔻"
+end)
+
+CreateToggleButton(TabTroll, "🔄 20.1 เปิด/ปิด Bang Rip (Bang Loop)", function(e)
+    BangRipEnabled = e
+    if BangRipEnabled then
+        local targetIdx = 1
+        if BangRipConn then BangRipConn:Disconnect() end
+        BangRipConn = RunService.Heartbeat:Connect(function()
+            if not BangRipEnabled then
+                if BangRipConn then BangRipConn:Disconnect() BangRipConn = nil end
+                return
+            end
+
+            local targets = GetTargets(BangRipTarget)
+            local curHRP = GetHRP(LocalPlayer)
+
+            if #targets == 0 or not curHRP or not curHRP.Parent then return end
+
+            for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+
+            local currentTarget = targets[targetIdx]
+            local tHRP = GetHRP(currentTarget)
+
+            if tHRP then
+                local offsetDist = 1.2 + (math.sin(tick() * (BangRipSpeed / 3)) * 1.0)
+                curHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, offsetDist)
+            end
+
+            targetIdx = (targetIdx % #targets) + 1
+        end)
+    else
+        if BangRipConn then BangRipConn:Disconnect() BangRipConn = nil end
+        if LocalPlayer.Character then
+            for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = true end
+            end
+        end
+    end
+end)
+
+-- 🛸 21. บินรอบผู้เล่น แบบเรียบเนียน (ปรับความเร็ว 0.1 - 1,000,000,000,009)
+CreateInputWithCircleBtn(TabTroll, "🛸 ความเร็วบินรอบ (0.1 - 1000000000009)", "⚡", function(t)
+    local n = tonumber(t)
+    if n then OrbitSpeed = math.clamp(n, 0.1, 1000000000009) end
+end)
+
+local refOrbit, openOrbit = CreateDropdown(TabTroll, "🛸 เลือกเป้าหมายบินรอบ 🔻", nil, "เลือก", Theme.AccentOn, function(p, btn)
+    OrbitTarget = p
+    btn.Text = p and ("🛸 เป้าหมายบินรอบ: " .. p.DisplayName) or "🛸 เลือกเป้าหมายบินรอบ 🔻"
+end)
+
+CreateToggleButton(TabTroll, "🛸 21. เปิด/ปิด บินรอบผู้เล่น (Smooth Orbit)", function(e)
+    OrbitEnabled = e
+    if OrbitEnabled then
+        local targetIdx = 1
+        if OrbitConn then OrbitConn:Disconnect() end
+        
+        OrbitConn = RunService.Heartbeat:Connect(function(dt)
+            if not OrbitEnabled then
+                if OrbitConn then OrbitConn:Disconnect() OrbitConn = nil end
+                return
+            end
+
+            local targets = GetTargets(OrbitTarget)
+            local curHRP = GetHRP(LocalPlayer)
+            local curHum = GetHum(LocalPlayer)
+
+            if #targets == 0 or not curHRP or not curHRP.Parent then return end
+
+            if curHum then
+                curHum.PlatformStand = false
+                curHum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+            end
+
+            if LocalPlayer.Character then
+                for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+            end
+
+            local currentTarget = targets[targetIdx]
+            local tHRP = GetHRP(currentTarget)
+
+            if tHRP then
+                OrbitAngle = OrbitAngle + (dt * OrbitSpeed)
+                if OrbitAngle > 1e12 or OrbitAngle < -1e12 then 
+                    OrbitAngle = OrbitAngle % (math.pi * 2) 
+                end
+
+                local offsetX = math.cos(OrbitAngle) * OrbitDistance
+                local offsetZ = math.sin(OrbitAngle) * OrbitDistance
+                local targetPos = tHRP.Position + Vector3.new(offsetX, 0, offsetZ)
+
+                curHRP.Velocity = Vector3.zero
+                curHRP.RotVelocity = Vector3.zero
+                curHRP.CFrame = CFrame.new(targetPos, tHRP.Position)
+            end
+
+            targetIdx = (targetIdx % #targets) + 1
+        end)
+    else
+        if OrbitConn then OrbitConn:Disconnect() OrbitConn = nil end
+        local curHum = GetHum(LocalPlayer)
+        if curHum then curHum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+        if LocalPlayer.Character then
+            for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = true end
+            end
+        end
+    end
+end)
+
+
+-- ==================== TAB 4: 🛡️ SAFETY & PLAYER (ตัวละครและความปลอดภัย) ====================
+
+-- 🛡️ 11. อมตะ ป้องกันมอนสตี้/ผู้เล่นทำความเสียหาย + กันตัวละครแยกร่างตาย
+local function EnableGodmodeProtection()
+    local char = LocalPlayer.Character
+    local hum = GetHum(LocalPlayer)
+
+    if hum and char then
+        hum.MaxHealth = math.huge
+        hum.Health = math.huge
+        hum.BreakJointsOnDeath = false
+
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+        -- ล็อกข้อต่อกระดูก (Motor6D) ไม่ให้หลุดแยกร่างเวลารับความเสียหาย
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("Motor6D") then
+                v.Enabled = true
+            end
+        end
+    end
+end
+
+CreateToggleButton(TabSafe, "🛡️ 11. อมตะ ไม่มีวันตาย/ไม่แยกร่าง (Godmode)", function(e)
+    GodmodeEnabled = e
+    if GodmodeEnabled then
+        EnableGodmodeProtection()
+
+        if GodmodeConn then GodmodeConn:Disconnect() end
+        GodmodeConn = RunService.Stepped:Connect(function()
+            if GodmodeEnabled then
+                EnableGodmodeProtection()
+            end
+        end)
+
+        local currentHum = GetHum(LocalPlayer)
+        if currentHum then
+            if GodmodeHealthConn then GodmodeHealthConn:Disconnect() end
+            GodmodeHealthConn = currentHum.HealthChanged:Connect(function()
+                if GodmodeEnabled and currentHum then
+                    currentHum.Health = math.huge
+                end
+            end)
+        end
+    else
+        if GodmodeConn then GodmodeConn:Disconnect() GodmodeConn = nil end
+        if GodmodeHealthConn then GodmodeHealthConn:Disconnect() GodmodeHealthConn = nil end
+
+        local hum = GetHum(LocalPlayer)
+        if hum then 
+            hum.MaxHealth = 100
+            hum.Health = 100
+            hum.BreakJointsOnDeath = true
+            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+        end
+    end
+end)
+
+CreateToggleButton(TabSafe, "🕳️ 13. ป้องกันตกแมพ (Anti-Void Return)", function(e)
+    AntiVoidEnabled = e
+    if AntiVoidEnabled then
+        AntiVoidConn = RunService.Heartbeat:Connect(function()
+            local hrp, hum = GetHRP(LocalPlayer), GetHum(LocalPlayer)
+            if hrp and hum then
+                if hum.FloorMaterial ~= Enum.Material.Air and hrp.Position.Y > (workspace.FallenPartsDestroyHeight + 20) then
+                    LastSafeCF = hrp.CFrame
+                end
+
+                if hrp.Position.Y <= (workspace.FallenPartsDestroyHeight + 30) then
+                    hum.Health = hum.MaxHealth
+                    hrp.CFrame = LastSafeCF and (LastSafeCF + Vector3.new(0, 3, 0)) or CFrame.new(0, 50, 0)
+                    hrp.Velocity = Vector3.new(0, 0, 0)
+                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                end
+            end
+        end)
+    else
+        if AntiVoidConn then AntiVoidConn:Disconnect() AntiVoidConn = nil end
+    end
+end)
+
+CreateActionButton(TabSafe, "💀 18. รีเซ็ตตัวละคร (Reset)", "กดรีเซ็ต", Theme.ButtonRed, function()
+    local char, hum = LocalPlayer.Character, GetHum(LocalPlayer)
+    if char and hum then
+        hum.MaxHealth = 100
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        hum.Health = 0
+        char:BreakJoints()
+    end
+end)
+
+
+-- Refresh Lists & Respawn Listeners
+local function RefreshAll()
+    if openJS and openJS() then refJS() end
+    if openLF and openLF() then refLF() end
+    if openLookAt and openLookAt() then refLookAt() end
+    if openFling and openFling() then refFling() end
+    if openBehind and openBehind() then refBehind() end
+    if openBangRip and openBangRip() then refBangRip() end
+    if openESP and openESP() then refESP() end
+    if openOrbit and openOrbit() then refOrbit() end
+end
+Players.PlayerAdded:Connect(RefreshAll)
+Players.PlayerRemoving:Connect(RefreshAll)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    if NoLegAnimEnabled then
+        local anim = char:FindFirstChild("Animate")
+        if anim then anim.Disabled = true end
+    end
+    if GodmodeEnabled then
+        EnableGodmodeProtection()
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if GodmodeHealthConn then GodmodeHealthConn:Disconnect() end
+            GodmodeHealthConn = hum.HealthChanged:Connect(function()
+                if GodmodeEnabled and hum then
+                    hum.Health = math.huge
+                end
+            end)
+        end
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    local hum = GetHum(LocalPlayer)
+    if hum and not AutoFollowEnabled then
+        if WalkSpeedEnabled then
+            if hum.WalkSpeed ~= WalkSpeedValue then
+                hum.WalkSpeed = WalkSpeedValue
+            end
+        end
+    end
+end)
